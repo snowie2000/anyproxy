@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 const maxRedirects = 20
 
 var tr = &http.Transport{Proxy: http.ProxyFromEnvironment}
+var proxy string
 
 func copyHeaders(src http.Header, dst http.Header) {
 	for k, vv := range src {
@@ -27,12 +29,30 @@ func copyHeaders(src http.Header, dst http.Header) {
 	}
 }
 
+func getFullURL(r *http.Request) string {
+	// 1. Start with the URL object from the request
+	u := *r.URL
+
+	// 2. Set the Host (r.URL.Host is often empty in server handlers)
+	u.Host = r.Host
+
+	// 3. Determine the Scheme (http vs https)
+	if r.TLS != nil {
+		u.Scheme = "https"
+	} else {
+		u.Scheme = "http"
+	}
+
+	return u.String()
+}
+
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	userAgent := r.URL.Query().Get("User-Agent")
 	if targetURL == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+		// http.Error(w, "Bad Request", http.StatusBadRequest)
+		// return
+		targetURL = getFullURL(r)
 	}
 	if userAgent != "" {
 		r.Header.Set("User-Agent", userAgent)
@@ -104,8 +124,23 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	port := "9090"
+
+	port := flag.Int("port", 9090, "listening port")
+	flag.StringVar(&proxy, "proxy", "", "upstream proxy URL (e.g., http://proxy:port or socks5://proxy:port)")
+	flag.Parse()
+
+	if proxy != "" {
+		if !strings.Contains(proxy, "://") {
+			proxy = "http://" + proxy
+		}
+		proxyURL, err := url.Parse(proxy)
+		if err != nil {
+			log.Fatal("Invalid proxy URL:", err)
+		}
+		tr.Proxy = http.ProxyURL(proxyURL)
+	}
+
 	http.HandleFunc("/", proxyHandler)
-	fmt.Printf("anyproxy streaming on http://localhost:%s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	fmt.Printf("anyproxy streaming on http://localhost:%d\n", *port)
+	log.Fatal(http.ListenAndServe(":"+fmt.Sprint(*port), nil))
 }
