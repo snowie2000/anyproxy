@@ -29,7 +29,7 @@ func copyHeaders(src http.Header, dst http.Header) {
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
-	userAgent := r.URL.Query().Get("User-Agent")
+	userAgent := r.URL.Query().Get("ua")
 	if targetURL == "" {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
